@@ -7,7 +7,7 @@ object sort {
 			List.concat(
 				quicksort[K](comparator)(input.filter(comparator(_, pivot) > 0)),
 				(input.filter(comparator(_, pivot) == 0)),
-				quicksort[K](comparator)(input.filter(comparator(_, pivot) < 0)));	
+				quicksort[K](comparator)(input.filter(comparator(_, pivot) < 0)))
 
 		}
 	}
@@ -20,7 +20,8 @@ object sort {
 
 	def main(args: Array[String]): Unit = {
 		println("generates 100 random integers from 1 to 1000 and quicksorts them")
-		var list = List.tabulate(100)( _ => Math.ceil(Math.random() * 1000).toInt)//(Math.random*10).toInt)
-		println(quicksort[Int](comparator[Integer])(list));
+		var list = List.tabulate(100)( _ => Math.ceil(Math.random() * 1000).toInt)
+		var sorted_list = (quicksort[Int](comparator[Integer])(list))
+		println(sorted_list)
 	}
 }
