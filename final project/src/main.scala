@@ -1,10 +1,15 @@
 import akka.actor._
-import akka.routing.RoundRobinRouter
-import akka.util.Duration
-import akka.util.duration._
+// import akka.actor.{Actor, ActorRef, Terminated}
+import scala.collection.mutable.ArrayBuffer
+import akka.routing.RoundRobinPool
+// import akka.util.{Duration}
+import scala.concurrent.duration.Duration
+// import akka.util.duration._
+import scala.concurrent.duration._
+// import scala.concurrent.ExecutionContext.Implicits.global
 
 object multi extends App {
-
+  println("WELCOME EXTENDING \"APP\" OBJECT ACTS AS MAIN")
   calculate(nrOfWorkers = 8, nrOfElements = 100000, nrOfMessages = 10000)
 
   sealed trait Message
@@ -44,7 +49,7 @@ object multi extends App {
       val start: Long = System.currentTimeMillis
 
       val workerRouter = context.actorOf(
-        Props[Worker].withRouter(RoundRobinRouter(nrOfWorkers)), name = "workerRouter")
+        Props[Worker].withRouter(RoundRobinPool(nrOfWorkers)), name = "workerRouter")
 
       def receive = {
         case Calculate ⇒
@@ -57,9 +62,11 @@ object multi extends App {
           listener ! PiApproximation(pi, duration = (System.currentTimeMillis - start).millis)
           // Stops this actor and all its supervised children
           context.stop(self)
+          // system.scheduler.scheduleOnce(1 second) {
+          //   self ! PoisonPill
+          // }
         }
       }
-
     }
 
     class Listener extends Actor {
@@ -67,15 +74,14 @@ object multi extends App {
         case PiApproximation(pi, duration) ⇒
         println("\n\tPi approximation: \t%s\n\tCalculation time: \t%s"
           .format(pi, duration))
-        context.system.shutdown()
+        context.system.terminate()
       }
     }
 
-
     def calculate(nrOfWorkers: Int, nrOfElements: Int, nrOfMessages: Int) {
+
     // Create an Akka system
     val system = ActorSystem("AkkaSystem")
-
     // create the result listener, which will print the result and shutdown the system
     val listener = system.actorOf(Props[Listener], name = "listener")
 
