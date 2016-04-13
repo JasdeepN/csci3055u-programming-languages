@@ -62,7 +62,7 @@ object ScalaFXUI extends JFXApp {
 
     // dragModeActiveProperty <== dragModeCheckbox.selected
 
-    title = "Draggable Panels"
+    title = "Scala FX UI"
     scene = new Scene(600, 300) {
       root = new BorderPane() {
         top = msgPanelGroup
