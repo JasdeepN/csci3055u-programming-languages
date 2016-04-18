@@ -3,144 +3,118 @@ package ActorUI
 import akka.actor._
 import scala.collection.mutable.ArrayBuffer
 import akka.routing.RoundRobinPool
-import scala.concurrent.duration.Duration
-import scala.concurrent.duration._
+
+/**
+ * Creates a thread object which contains everything needed to start
+ * a multi threaded operation
+ */
 
 object threads {
-  // println("WELCOME EXTENDING \"APP\" OF OBJECT ACTS AS MAIN")
-  // calculate(nrOfWorkers = 4, nrOfElements = 10000, nrOfMessages = 10000)
-  // print_something(nrOfWorkers = 2, nrOfMessages = 5, "This is a Thread")
-  sealed trait Message
-  case object Calculate extends Message
-  case object start_task extends Message
-  case class doSomething(msg: Any) extends Message
-  case class Display_this(msg: Any) extends Message
-  case class Worker_Func(msg: Any) extends Message
-  case class Work(start: Int, nrOfElements: Int) extends Message
-  case class Result(value: Double) extends Message
-  case class Task(value: Any) extends Message
-  case class PiApproximation(pi: Double, duration: Duration)
 
-  class Worker extends Actor {
-    override def preStart() {
-      println("%s is running".format(self.path.name))
-    }
+   sealed trait Message
 
-    override def postStop() {
-      println("%s has stopped".format(self.path.name))
-    }
+   case object start_task extends Message
+   case class doSomething(msg: Any) extends Message
+   case class Display_this(msg: Any) extends Message
+   case class Worker_Func(msg: Any) extends Message
+   case class Task(value: Any) extends Message
 
-    def calculatePiFor(start: Int, nrOfElements: Int): Double = {
-      var acc = 0.0
-      for (i ← start until (start + nrOfElements))
-        acc += 4.0 * (1 - (i % 2) * 2) / (2 * i + 1)
-      acc
-    }
+   /**
+    * Generic class (basically a blank template) for what messages are
+    * sent between workers
+    */
 
-    def Worker_Func(msg: Any) = {
-      println("could be doing calculations here")
-      //can do calculations here
-      msg
-    }
+   class Worker() extends Actor {
 
-    //work has been assigned to a worker
-    def receive = {
-      //calls the "work" methods
-      case doSomething(msg) =>
-        sender ! Task(Worker_Func(msg))
-      case Work(start, nrOfElements) =>
-        // perform the work
-        sender ! Result(calculatePiFor(start, nrOfElements))
-    }
-  }
+      override def preStart() {
+         println("\to Thread %s is running".format(self.path.name))
+      }
 
-  class piCalculator(nrOfWorkers: Int, nrOfMessages: Int, nrOfElements: Int, listener: ActorRef) extends Actor {
-    var pi: Double = _
-    var nrOfResults: Int = _
-    val start: Long = System.currentTimeMillis
+      override def postStop() {
+         println("\tx Thread %s has stopped".format(self.path.name))
+      }
 
-    val workerRouter = context.actorOf(Props[Worker].withRouter(RoundRobinPool(nrOfWorkers)), name = "workerRouter")
+      /**
+       * Template method you could replace this with some meaningful calculations
+       */
 
-    def receive = {
-      case Calculate ⇒
-        for (i ← 0 until nrOfMessages) workerRouter ! Work(i * nrOfElements, nrOfElements)
+      def Worker_Func(msg: Any) = {
+         println("could be doing calculations here")
+         //can do calculations here
+         msg
+      }
 
-      case Result(value) ⇒
-        pi += value
-        nrOfResults += 1
-        if (nrOfResults == nrOfMessages) {
-          // Send the result to the listener
-          listener ! PiApproximation(pi, duration = (System.currentTimeMillis - start).millis)
-          // Stops this actor and all its supervised children
-          context.stop(self)
-        }
-    }
-  }
+      /**
+       * Recieves different "work" calls dispatchs the correct worker
+       */
 
-  class ThreadedTask(nrOfWorkers: Int, nrOfMessages: Int, listener: ActorRef, msg: String) extends Actor {
-    var nrOfResults: Int = _
-    val start: Long = System.currentTimeMillis
+      def receive = {
+         //calls the "work" methods
+         case doSomething(msg) =>
+            sender ! Task(Worker_Func(msg))
+      }
+   }
 
-    val workerRouter = context.actorOf(Props[Worker].withRouter(RoundRobinPool(nrOfWorkers)), name = "workerRouter")
+   /**
+    * Listener actor class executes based on case it recieves
+    */
 
-    def receive = {
-      case `start_task` ⇒
-        for (i ← 0 until nrOfMessages) workerRouter ! doSomething(msg)
+   class Listener extends Actor {
 
-      case Task(value) ⇒
-        nrOfResults += 1
-        // Send the result to the listener
-        listener ! Display_this(value)
-        if (nrOfResults == nrOfMessages) { //stops when # msgs == # results
+      def receive = {
+         case Display_this(input) =>
+            println(input)
+            context.system.terminate()
+         //...
+      }
+   }
 
-          // Stops this actor and all its supervised children
-          context.stop(self)
+   /**
+    * Creates the round robin work router and contains the recieve cases
+    * Usually called directly by start
+    *
+    * @pram number of threads
+    * @pram listener actor
+    * @pram other args
+    */
 
-          // system.scheduler.scheduleOnce(1 second) {
-          //   self ! PoisonPill
-          // }
+   class ThreadedTask(nrOfWorkers: Int, listener: ActorRef, msg: Any) extends Actor {
 
-        }
-    }
-  }
+      val workerRouter = context.actorOf(Props[Worker].withRouter(RoundRobinPool(nrOfWorkers)), name = "workerRouter")
 
-  class Listener extends Actor {
-    def receive = {
-      case PiApproximation(pi, duration) ⇒
-        println("\n\tPi approximation: \t%s\n\tCalculation time: \t%s".format(pi, duration))
-        context.system.terminate()
+      def receive = {
+         case `start_task` ⇒
+            workerRouter ! doSomething(msg)
 
-      case Display_this(input) ⇒
-        println(input)
-        context.system.terminate()
-    }
-  }
+         case Task(value) ⇒
+            // Send the result to the listener
+            listener ! Display_this(value)
 
-  def calculate(nrOfWorkers: Int, nrOfElements: Int, nrOfMessages: Int) {
-    // Create an Akka system
-    val system = ActorSystem("AkkaSystem")
-    // create the result listener, which will print the result and shutdown the system
-    val listener = system.actorOf(Props[Listener], name = "listener")
+            // Stops this actor and all its supervised children
+            context.stop(self)
+      }
+   }
 
-    // create the master
-    val master = system.actorOf(Props(new piCalculator(nrOfWorkers, nrOfMessages, nrOfElements, listener)), name = "master")
+   /**
+    * Handles creating the actor system, starting the listener, and "Threaded_Task"
+    * Currently set up to only print a message
+    *
+    * @pram number of threads to be used
+    * @pram msg to print
+    */
 
-    // start the calculation
-    master ! Calculate
-  }
+   def start(nrOfWorkers: Int, msg: String) {
+      // Create an Akka system
+      val system = ActorSystem("AkkaSystem")
+      // create the result listener, which will print the result and shutdown the system
+      val listener = system.actorOf(Props[Listener], name = "listener")
 
-  def print_something(nrOfWorkers: Int, nrOfMessages: Int, msg: String) {
-    // Create an Akka system
-    val system = ActorSystem("AkkaSystem")
-    // create the result listener, which will print the result and shutdown the system
-    val listener = system.actorOf(Props[Listener], name = "listener")
+      // create the master
+      val Threaded_Task = system.actorOf(Props(new ThreadedTask(
+         nrOfWorkers, listener, msg)),
+         name = "master")
 
-    // create the master
-    val Threaded_Task = system.actorOf(Props(new ThreadedTask(
-      nrOfWorkers, nrOfMessages, listener, msg)),
-      name = "master")
-
-    // start the calculation
-    Threaded_Task ! start_task
-  }
+      // start the calculation
+      Threaded_Task ! start_task
+   }
 }
